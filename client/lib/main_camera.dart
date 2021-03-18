@@ -55,7 +55,7 @@ class _MyHomePageState extends State<MyHomePage> {
     return Scaffold(
       appBar: AppBar(
         leading: new Container(),
-        title: Text("PATS",
+        title: Text("SATS",
             style: TextStyle(
             color: Colors.black,
         )),
