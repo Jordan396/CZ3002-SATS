@@ -2,11 +2,12 @@ import 'dart:io';
 import 'package:path/path.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:sats/service.dart';
-import 'package:sats/select_loc.dart';
+import 'package:pats/service.dart';
+import 'package:pats/select_loc.dart';
 import 'package:http/http.dart' as http;
-import 'package:sats/start_screen.dart';
-import 'package:sats/end_session.dart';
+import 'package:pats/start_screen.dart';
+import 'package:pats/end_session.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() {
   runApp(MyApp());
@@ -16,6 +17,9 @@ String line, result, matric;
 var status;
 Loc session = new Loc();
 var classID = session.selectClass();
+var matricList = new List(10);
+int o = 0, num=0;
+
 
 class MyApp extends StatelessWidget {
   // This widget is the root of your application.
@@ -37,12 +41,13 @@ class MyHomePage extends StatefulWidget {
   MyHomePage({Key key, this.title}) : super(key: key);
 
   final String title;
-
+  Loc session = new Loc();
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+
   File selectedImage;
 
   @override
@@ -50,17 +55,19 @@ class _MyHomePageState extends State<MyHomePage> {
     return Scaffold(
       appBar: AppBar(
         leading: new Container(),
-        title: Text("sats",
+        title: Text("PATS",
             style: TextStyle(
-              color: Colors.black,
-            )),
+            color: Colors.black,
+        )),
         centerTitle: true,
         actions: <Widget>[
+
           IconButton(
             icon: Icon(Icons.indeterminate_check_box),
             tooltip: "End Session",
-            onPressed: () async {
+            onPressed: () async{
               confirmEndSession(context);
+              //await endSession();
             },
           )
         ],
@@ -93,28 +100,27 @@ class _MyHomePageState extends State<MyHomePage> {
                           return selectedImage != null
                               ? Image.file(selectedImage)
                               : Center(
-                                  child: Text("Please Get the Image"),
-                                );
+                            child: Text("Please Get the Image"),
+                          );
                         }
                     }
                   },
                 ),
-                decoration:
-                    BoxDecoration(border: Border.all(color: Colors.grey[500])),
+                decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[500])),
               ),
             ],
           ),
-          SizedBox(
-            height: 20,
-          ),
+          SizedBox(height: 20,),
           RaisedButton(
-            onPressed: () async {
-              setState(() async {
+            onPressed: () async{
+              setState(() async{
                 await getImage();
                 await submitSubscription();
                 show_attendance_result(context);
+                print(classID);
               });
-            },
+          },
             child: Icon(Icons.add_a_photo),
           )
         ],
@@ -149,18 +155,18 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   ///upload image to server
-  submitSubscription() async {
+  submitSubscription()async{
+    classID = await session.selectClass();
+
     print(classID);
-
     ///MultiPart request
-    var request = http.MultipartRequest(
-        'POST',
-        Uri.parse(
-            'http://172.21.148.169:5000/attendance/submit?class=$classID'));
+    var request = http.MultipartRequest('POST', Uri.parse('http://172.21.148.169:5000/attendance/submit?class=$classID'));
 
-    Map<String, String> headers = {"Content-type": "multipart/form-data"};
-    request.files
-        .add(await http.MultipartFile.fromPath('image', selectedImage.path));
+    Map<String,String> headers={
+      "Content-type": "multipart/form-data"
+    };
+    request.files.add(await http.MultipartFile.fromPath('image', selectedImage.path));
+    //request.files.add(await http.MultipartFile.fromPath('image', 'assets\U1922030E.jpeg'));
 
     request.headers.addAll(headers);
     /*request.fields.addAll({
@@ -175,36 +181,58 @@ class _MyHomePageState extends State<MyHomePage> {
       //print(await response.stream.bytesToString());
       line = await response.stream.bytesToString();
       print(line);
-      //matric = line.substring(35,43);
-      //print(matric);
       status = line.contains("true");
       print(status);
-      if (status == true) {
-        //matching photos
+      if(status == true){ //matching photos
+        matric = line.substring(33,42);
+        print(matric);
         result = "Attendance Taken. Thank you.";
-      } else {
+        await Firestore.instance.collection('Attendance')
+            .document(classID)
+            .updateData({matric: true})
+            .then((value) => print("Attendance Updated"))
+            .catchError((error) => print("Failed to update attendance: $error"));
+      }
+      else{
         result = "Not found.";
       }
-    } else {
+      if(matric != null) {
+        matricList[o] = matric;
+        print(matricList);
+        o++;
+        num++;
+        matric = null;
+      }
+
+
+    }
+    else {
       print(response.reasonPhrase);
       print(response.statusCode);
     }
   }
-
   ///End Class Session
   endSession() async {
     print(classID);
-    var request = http.Request(
-        'POST',
-        Uri.parse(
-            'http://172.21.148.169:5000/classes/terminate?class=$classID'));
+    o=0;
+    var request = http.Request('POST', Uri.parse('http://172.21.148.169:5000/classes/terminate?class=$classID'));
 
     http.StreamedResponse response = await request.send();
     if (response.statusCode == 200) {
       print(await response.stream.bytesToString());
-    } else {
+      /*for(int j=0; j<num; j++){
+        Firestore.instance.collection('Attendance')
+            .document(classID)
+            .updateData({matricList[j]: false})
+            .then((value) => print("Session Ended"));
+        //.catchError((error) => print("Failed to update attendance: $error"));
+      }*/
+      matricList = new List(10);
+    }
+    else {
       print(response.reasonPhrase);
     }
+
   }
 
   ///Popup Notification to confirm whether attendance is taken
@@ -221,7 +249,8 @@ class _MyHomePageState extends State<MyHomePage> {
     AlertDialog alert = AlertDialog(
       title: Text("Attendance Result"),
       // Text changes according to result from model
-      content: Text(result),
+      content: Text(
+          result),
       /*actions: [
         closeButton,
       ],*/
@@ -250,5 +279,42 @@ class _MyHomePageState extends State<MyHomePage> {
           height: (MediaQuery.of(context).size.height * 0.7).toInt());
       _image = image;*/
     }
+  }
+
+  ///Popup Notification to confirm end session
+  confirmEndSession(BuildContext context) {
+    // set up the buttons
+    Widget cancelButton = FlatButton(
+      child: Text("Cancel"),
+      onPressed:  () {
+        Navigator.of(context).pop(true);
+      },
+    );
+    Widget endButton = FlatButton(
+      child: Text("End"),
+      onPressed:  () {
+        endSession();
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => StartScreen()));
+      },
+    );
+    // set up the AlertDialog
+    AlertDialog alert = AlertDialog(
+      title: Text("End Session"),
+      content: Text("Would you like end session?"),
+      actions: [
+        cancelButton,
+        endButton,
+      ],
+    );
+    // show the dialog
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return alert;
+      },
+    );
   }
 }

@@ -4,8 +4,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'main_camera.dart';
 import 'package:http/http.dart' as http;
-import 'package:sats/students.dart';
-import 'package:sats/show_initialisation_result.dart';
+import 'package:pats/students.dart';
+import 'package:pats/show_initialisation_result.dart';
 import 'package:http_parser/http_parser.dart';
 import 'dart:convert';
 
@@ -14,9 +14,10 @@ void main() {
 }
 
 GlobalKey<FormState> formkey = GlobalKey<FormState>();
-final List<String> studList = [];
-final List<String> studnameList = [];
-final List<String> studimageList = [];
+List<String> studList = [];
+List<String> studnameList = [];
+List<String> studimageList = [];
+List<String> data;
 var classId;
 String status;
 
@@ -55,6 +56,7 @@ class LocPage extends StatefulWidget {
   LocPage({Key key, this.title}) : super(key: key);
 
   final String title;
+
 
   // void displayClass(){
   //   Firestore firestoreInstance = Firestore.instance;
@@ -118,49 +120,54 @@ class _LocPageState extends State<LocPage> {
                               width: 200.0,
                               child: DropdownButton(
                                 items: classList,
-                                onChanged: (classVal) async {
+                                onChanged: (classVal) async{
                                   setState(() {
                                     classId = classVal;
+                                    studList = [];
+                                    studimageList = [];
+                                    studnameList = [];
+                                    data = [];
                                   });
                                   Firestore.instance
                                       .collection("Classes")
                                       .document(classId)
                                       .get()
-                                      .then(
-                                    (value) {
-                                      value.data['Students'].forEach((result) {
-                                        studList.add(result);
-                                      });
+                                      .then((value) {
+                                    value.data['Students'].forEach((result) {
+                                      studList.add(result);
                                       //print(studList);
-                                      for (int i = 0;
-                                          i < studList.length;
-                                          i++) {
-                                        Firestore.instance
-                                            .collection("Students")
-                                            .document(studList[i])
-                                            .get()
-                                            .then((value) {
-                                          studnameList.add(value.data['Name']);
-                                          //print(studnameList);
-                                        });
-                                        //print(studnameList);
+                                    });
+                                    //print matric number;
 
-                                      }
-                                      for (int i = 0;
-                                          i < studList.length;
-                                          i++) {
-                                        Firestore.instance
-                                            .collection("Students")
-                                            .document(studList[i])
-                                            .get()
-                                            .then((value) {
-                                          studimageList
-                                              .add(value.data['Image']);
-                                          //print(studimageList);
-                                        });
-                                      }
-                                    },
-                                  );
+                                    for (int i = 0; i < studList.length; i++){
+                                       Firestore.instance
+                                          .collection("Students")
+                                          .document(studList[i])
+                                          .get()
+                                          .then((value) {
+                                        studnameList.add(value.data['Name']);
+                                        print(studList[i]);
+                                        print(studnameList);
+                                      });
+                                      //print student name;
+
+                                    }
+                                    for (int i = 0; i < studList.length; i++) {
+                                      Firestore.instance
+                                          .collection("Students")
+                                          .document(studList[i])
+                                          .get()
+                                          .then((value) {
+                                        studimageList.add(value.data['Image']);
+                                        //print(studimageList);
+                                      });
+
+                                    }
+                                    // print student image path
+
+
+                                  },);
+
                                 },
                                 value: classId,
                                 isExpanded: false,
@@ -178,18 +185,19 @@ class _LocPageState extends State<LocPage> {
                 // ),
                 Column(children: <Widget>[
                   RaisedButton(
-                      child: Text("Start"),
-                      onPressed: () async {
-                        if (classId != null) {
-                          await initialiseClass();
-                          Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) => MyHomePage()));
-                        } else {
-                          show_initialisation_result(context);
-                        }
-                      })
+                    child: Text("Start"),
+                    onPressed: () async {
+                      if(classId != null){
+                        await initialiseClass();
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => MyHomePage()));
+                      }
+                      else{
+                        show_initialisation_result(context);
+                      }
+                    })
                 ]),
               ]),
         ));
@@ -197,19 +205,26 @@ class _LocPageState extends State<LocPage> {
 
   initialiseClass() async {
     ///adding student details into an array for request body
-    List<String> data = [];
-    for (int m = 0; m < studList.length; m++) {
-      data.add(
-          '{"name": "${studnameList[m]}","matric": "${studList[m]}","image": "${studimageList[m]}"}'
-              .toString());
-      print(data);
+    //List<String> data= [];
+    //List<String> studMatric = [];
+    for(int m=0; m < studList.length; m++){
+      //data.add('{"name": "${studnameList[m]}","matric": "${studList[m]}","image": "${studimageList[m]}"}'.toString());
+      for(int k=0; k<studList.length; k++){
+        if(studimageList[m].contains(studList[k]))
+          data.add('{"name": "${studnameList[m]}","matric": "${studList[k]}","image": "${studimageList[m]}"}'.toString());
+      }
+      //print(data);
     }
+    print(data);
 
     ///sending the POST request - initialise class
-    var headers = {'Content-Type': 'application/json'};
-    var request = http.Request('POST',
-        Uri.parse('http://172.21.148.169:5000/classes/init?class=$classId'));
-    request.body = '''{"students": $data}''';
+    var headers = {
+      'Content-Type': 'application/json'
+    };
+    var request = http.Request(
+        'POST', Uri.parse('http://172.21.148.169:5000/classes/init?class=$classId'));
+    request.body =
+    '''{"students": $data}''';
     request.headers.addAll(headers);
     print(request.body);
 
@@ -217,8 +232,18 @@ class _LocPageState extends State<LocPage> {
     if (response.statusCode == 200) {
       print(await response.stream.bytesToString());
       print(response.reasonPhrase);
-    } else {
+    }
+    else {
       print(response.reasonPhrase);
     }
+
   }
+
+  selectClass(){
+    setState(() {
+      return classId;
+    });
+    //return classId;
+  }
+
 }
